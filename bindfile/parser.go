@@ -57,16 +57,18 @@ func NamedConfLocalParser(namedConfLocalFile string) ([]bindmodel.Zone, error) {
 	return zones, nil
 }
 
-func DBZoneParser(dbZoneFile string) ([]bindmodel.DNSZone, error) {
+func DBZoneParser(dbZoneFile string) (*bindmodel.DatabaseDNSZone, error) {
 	// Compiling REGEX
 	EMPTY_LINE := `^\s*$`
 	COMMENT_LINE := `^\s*;.*$`                                           // Example : ; BIND data file for local loopback interface
+	TTL_LINE := `^\s*\$TTL\s*(\d*?)\s*(;.*)*$`                           // Example : $TTL    604800
 	MULTILINE_ENTRY_LINE := `^(.*?)\s+IN\s+(.*?)\s+(.*?)\s*\(\s*(;.*)*$` // Example : @       IN      SOA     localhost. root.localhost. (
 	ADDITIONAL_INFORMATION_LINE := `^\s*(\d*?)\s*(;.*)*$`                // Example :                               2         ; Serial
 	ENDING_ADDITIONAL_INFORMATION_LINE := `^\s*(\d*?)\s*\)\s*(;.*)*$`    // Example :                          604800 )       ; Negative Cache TTL
 	SINGLE_ENTRY_LINE := `^(.*?)\s+IN\s+(.*?)\s+(.*?)\s*(;.*)*$`         // Example : home.lab.       IN      A       10.0.0.1
 	emptyLineRegex := regexp.MustCompile(EMPTY_LINE)
 	commentLineRegex := regexp.MustCompile(COMMENT_LINE)
+	ttlLineRegex := regexp.MustCompile(TTL_LINE)
 	multilineEntryLineRegex := regexp.MustCompile(MULTILINE_ENTRY_LINE)
 	additionalInformationLineRegex := regexp.MustCompile(ADDITIONAL_INFORMATION_LINE)
 	endingAdditionalInformationLineRegex := regexp.MustCompile(ENDING_ADDITIONAL_INFORMATION_LINE)
@@ -78,13 +80,19 @@ func DBZoneParser(dbZoneFile string) ([]bindmodel.DNSZone, error) {
 	}
 	defer file.Close()
 	// Creates dns zones object from file
-	var dnsZones []bindmodel.DNSZone
+	var databaseDNSZone bindmodel.DatabaseDNSZone
 	var currentDNSZone bindmodel.DNSZone
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if commentLineRegex.MatchString(line) || emptyLineRegex.MatchString(line) {
 			continue
+		} else if ttlLineRegex.MatchString(line) {
+			extractFromLine := ttlLineRegex.FindStringSubmatch(line)
+			searchedNumber, err := strconv.Atoi(extractFromLine[1])
+			if err == nil {
+				databaseDNSZone.TTL = searchedNumber
+			}
 		} else if multilineEntryLineRegex.MatchString(line) {
 			extractFromLine := multilineEntryLineRegex.FindStringSubmatch(line)
 			currentDNSZone = bindmodel.DNSZone{
@@ -98,7 +106,7 @@ func DBZoneParser(dbZoneFile string) ([]bindmodel.DNSZone, error) {
 			if err == nil {
 				currentDNSZone.AdditionalInformation = append(currentDNSZone.AdditionalInformation, searchedNumber)
 			}
-			dnsZones = append(dnsZones, currentDNSZone)
+			databaseDNSZone.DNSZones = append(databaseDNSZone.DNSZones, currentDNSZone)
 		} else if additionalInformationLineRegex.MatchString(line) {
 			extractFromLine := additionalInformationLineRegex.FindStringSubmatch(line)
 			searchedNumber, err := strconv.Atoi(extractFromLine[1])
@@ -107,12 +115,12 @@ func DBZoneParser(dbZoneFile string) ([]bindmodel.DNSZone, error) {
 			}
 		} else if singleEntryLineRegex.MatchString(line) {
 			extractFromLine := singleEntryLineRegex.FindStringSubmatch(line)
-			dnsZones = append(dnsZones, bindmodel.DNSZone{
+			databaseDNSZone.DNSZones = append(databaseDNSZone.DNSZones, bindmodel.DNSZone{
 				DNS:       extractFromLine[1],
 				EntryType: extractFromLine[2],
 				IP:        extractFromLine[3],
 			})
 		}
 	}
-	return dnsZones, nil
+	return &databaseDNSZone, nil
 }

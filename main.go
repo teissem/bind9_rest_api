@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"teissem.fr/bind9_rest_api/bindfile"
 )
 
@@ -11,12 +9,10 @@ func main() {
 	if err != nil {
 		panic(0)
 	}
-	fmt.Println(len(zones))
-	fmt.Println(zones)
+	bindfile.GenerateNamedConfLocal(zones, "example/named.conf.local.generated")
 	DNSZones, err := bindfile.DBZoneParser("example/db.home.lab")
 	if err != nil {
 		panic(0)
 	}
-	fmt.Println(len(DNSZones))
-	fmt.Println(DNSZones)
+	bindfile.GenerateDBZone(DNSZones, "example/db.home.lab.generated")
 }

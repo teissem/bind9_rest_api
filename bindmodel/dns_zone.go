@@ -6,3 +6,8 @@ type DNSZone struct {
 	IP                    string
 	AdditionalInformation []int
 }
+
+type DatabaseDNSZone struct {
+	TTL      int
+	DNSZones []DNSZone
+}
