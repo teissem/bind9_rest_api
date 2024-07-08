@@ -38,7 +38,7 @@ func (ws *WebServer) AddZone(c *gin.Context) {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	//
+	// Searching already existing zone or file
 	for _, zone := range zones {
 		if zone.Name == newZone.Name || zone.FileLocation == newZone.FileLocation {
 			c.AbortWithError(http.StatusUnprocessableEntity, fmt.Errorf("zone with the name %s or the file %s already exists", newZone.Name, newZone.FileLocation))
@@ -46,16 +46,83 @@ func (ws *WebServer) AddZone(c *gin.Context) {
 		}
 	}
 	zones = append(zones, newZone)
-	// Generate the new file
-	err = bindfile.GenerateNamedConfLocal(zones, ws.NamedConfLocalLocation)
+	if err = ws.generateNamedConfLocalAndReloadBind(zones); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
+func (ws *WebServer) ModifyZone(c *gin.Context) {
+	// Get zone name from path param
+	zoneName := c.Param("zone")
+	// Get body into ModifyZoneInput struct
+	var modifyZoneInput bindmodel.ModifyZoneInput
+	err := c.Bind(&modifyZoneInput)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+	// Read named.conf.local
+	ws.NamedConfLocalLock.Lock()
+	defer ws.NamedConfLocalLock.Unlock()
+	zones, err := bindfile.NamedConfLocalParser(ws.NamedConfLocalLocation)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	// Reload the bind service
-	err = bindfile.ReloadBind(ws.CommandReloadBind)
-	if err != nil {
+	// Searching already existing zone or file
+	foundZone := false
+	for _, zone := range zones {
+		if zone.Name == zoneName {
+			zone.FileLocation = modifyZoneInput.FileLocation
+			foundZone = true
+		} else if zone.FileLocation == modifyZoneInput.FileLocation {
+			c.AbortWithError(http.StatusUnprocessableEntity, fmt.Errorf("zone with the file %s already exists", modifyZoneInput.FileLocation))
+			return
+		}
+	}
+	if !foundZone {
+		c.AbortWithError(http.StatusNotFound, fmt.Errorf("%s zone not found", zoneName))
+		return
+	}
+	if err = ws.generateNamedConfLocalAndReloadBind(zones); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
+		return
 	}
 	c.Status(http.StatusOK)
+}
+
+func (ws *WebServer) DeleteZone(c *gin.Context) {
+	// Get zone name from path param
+	zoneName := c.Param("zone")
+	// Read named.conf.local
+	ws.NamedConfLocalLock.Lock()
+	defer ws.NamedConfLocalLock.Unlock()
+	zones, err := bindfile.NamedConfLocalParser(ws.NamedConfLocalLocation)
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	var modifiedZones []bindmodel.Zone
+	for _, zone := range zones {
+		if zone.Name != zoneName {
+			modifiedZones = append(modifiedZones, zone)
+		}
+	}
+	if err = ws.generateNamedConfLocalAndReloadBind(modifiedZones); err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
+func (ws *WebServer) generateNamedConfLocalAndReloadBind(zones []bindmodel.Zone) error {
+	// Generate the new file
+	err := bindfile.GenerateNamedConfLocal(zones, ws.NamedConfLocalLocation)
+	if err != nil {
+		return err
+	}
+	// Reload the bind service
+	return bindfile.ReloadBind(ws.CommandReloadBind)
 }

@@ -27,4 +27,6 @@ func InitWebServer(namedConfLocalLocation string, commandReloadBind string) *Web
 func (ws *WebServer) AddRoutes() {
 	ws.GinEngine.GET("/zone", ws.ZoneList)
 	ws.GinEngine.POST("/zone", ws.AddZone)
+	ws.GinEngine.PUT("/zone/:zone", ws.ModifyZone)
+	ws.GinEngine.DELETE("/zone/:zone", ws.DeleteZone)
 }
