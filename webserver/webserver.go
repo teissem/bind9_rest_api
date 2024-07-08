@@ -25,8 +25,14 @@ func InitWebServer(namedConfLocalLocation string, commandReloadBind string) *Web
 }
 
 func (ws *WebServer) AddRoutes() {
-	ws.GinEngine.GET("/zone", ws.ZoneList)
-	ws.GinEngine.POST("/zone", ws.AddZone)
-	ws.GinEngine.PUT("/zone/:zone", ws.ModifyZone)
-	ws.GinEngine.DELETE("/zone/:zone", ws.DeleteZone)
+	api := ws.GinEngine.Group("/api")
+	{
+		v1 := api.Group("/v1")
+		{
+			v1.GET("/zone", ws.ZoneList)
+			v1.POST("/zone", ws.AddZone)
+			v1.PUT("/zone/:zone", ws.ModifyZone)
+			v1.DELETE("/zone/:zone", ws.DeleteZone)
+		}
+	}
 }
